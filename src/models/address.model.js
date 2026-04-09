@@ -37,6 +37,12 @@ const addressSchema = new Schema(
       trim: true,
       lowercase: true,
     },
+    district: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+    },
     state: {
       type: String,
       required: true,
@@ -47,6 +53,10 @@ const addressSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      match: [
+        /^\d{6}$/,
+        "Please enter a valid 6-digit Indian postal code (PIN code)"
+      ]
     },
     country: {
       type: String,

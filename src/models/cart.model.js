@@ -1,4 +1,6 @@
 import mongoose, { Schema } from "mongoose";
+import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
+
 
 const cartSchema = new Schema(
   {
@@ -35,5 +37,7 @@ const cartSchema = new Schema(
 );
 
 cartSchema.index({ user: 1 }, { unique: true });
+
+cartSchema.plugin(mongooseAggregatePaginate);
 
 export const Cart = mongoose.model("Cart", cartSchema);

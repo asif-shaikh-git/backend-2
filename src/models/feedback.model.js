@@ -1,4 +1,6 @@
 import mongoose, { Schema } from "mongoose";
+import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
+
 
 const feedbackSchema = new Schema(
   {
@@ -52,5 +54,6 @@ const feedbackSchema = new Schema(
 
 feedbackSchema.index({ customer: 1, product: 1 }, { unique: true });
 
+feedbackSchema.plugin(mongooseAggregatePaginate);
 
 export const Feedback = mongoose.model("Feedback", feedbackSchema);

@@ -1,8 +1,5 @@
 //import mongoose from "mongoose";
 //import { DB_NAME } from "./constants.js";
-import express from "express";
-
-const app = express();
 
 /* 1^ approach: ALL CODE IN ONE PLACE , NOT RECOMMENDED FOR PRODUCTION 
     BUT GOOD FOR LEARNING PURPOSES AND SMALL PROJECTS 
@@ -35,16 +32,15 @@ const app = express();
     DB CONNECTION WITH try catch (error) IN db/index.js AND SERVER STARTUP IN src/index.js
     SEE src/db/index.js FOR DB CONNECTION IMPLEMENTATION
 */
-  
+import express from "express";
 import dotenv from "dotenv";
- 
+import connectDB from "./db/index.js";
+
 dotenv.config({
     path: "./.env"
 });
 
-
-import connectDB from "./db/index.js";
-
+const app = express();
 connectDB()
 .then(() => {
     app.on("error", (err) => {
