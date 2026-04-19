@@ -1,70 +1,16 @@
 import mongoose, { Schema } from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
+import { commonAuthFields, attachHashCompare, attachTokenMethods, attachSessionMethods } from "./commonAuth.model.js";
+
 
 const userSchema = new Schema(
   {
-    username: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-      index: true,
-    },
-    email: {
-      type: String,
-      required: [true, "Email is required"],
-      unique: true,
-      lowercase: true,
-      trim: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        "Please enter a valid email address",
-      ],
-    },
-    mobileNumber: {
-      type: String,
-      required: [true, "Mobile number required"],
-      unique: true,
-      trim: true,
-      match: [
-        /^[6-9]\d{9}$/,
-        "Please enter a valid 10-digit Indian mobile number",
-      ],
-    },
-    password: {
-      type: String,
-      required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters long"],
-      select: false,
-    },
-    fullName: {
-      type: String,
-      required: [true, "User fullname is required"],
-      trim: true,
-      index: true,
-    },
-    avatar: {
-      type: String, //cloudinary url
-      default: "",
-    },
-    coverImage: {
-      type: String, //cloudinary url
-      default: "",
-    },
+    ...commonAuthFields,
+
     role: {
       type: String,
-      enum: ["user", "admin", "vendor"],
+      enum: ["user", "vendor"],
       default: "user",
-    },
-    socketId: {
-      type: String,
-    },
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
     },
     orderHistory: [
       {
@@ -84,37 +30,6 @@ const userSchema = new Schema(
         ref: "Product",
       },
     ],
-    refreshTokens: [
-      {
-        token: {
-          type: String,
-          required: true,
-          select: false,
-        },
-        sessionId: {
-          type: String,
-          required: true,
-        },
-        device: {
-          type: String,
-          required: true,
-        },
-        ipAddress: {
-          type: String,
-        },
-        userAgent: {
-          type: String,
-        },
-        expiresAt: {
-          type: Date,
-          required: true,
-        },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
   },
   { timestamps: true }
 );
@@ -123,7 +38,7 @@ const userSchema = new Schema(
 userSchema.plugin(mongooseAggregatePaginate);
 
 // to hash password before saving user document:
-userSchema.pre("save", async function (next) {
+/*userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
   }
@@ -135,9 +50,12 @@ userSchema.pre("save", async function (next) {
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
+*/
+// Alternative way, to hash password before saving user document:
+attachHashCompare(userSchema);
 
 // to generate JWT access token: Short-lived access token
-userSchema.methods.generateAccessToken = function () {
+/*userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
       _id: this._id,
@@ -158,18 +76,55 @@ userSchema.methods.generateRefreshToken = function () {
   });
 };
 
-userSchema.methods.cleanupRefreshTokens = function () {
+*/
+
+// Alternative way,to generate JWT access token: Short-lived access token
+// and to generate JWT refresh token: Long-lived refresh token:
+attachTokenMethods(userSchema);
+
+// remove expired session first : in case user has multiple sessions 
+// and some of them are expired, then remove those expired sessions
+//  before adding new session to DB:
+
+/*userSchema.methods.cleanupRefreshTokens = async function () {
   const now = new Date();
 
   const originalLength = this.refreshTokens.length;
 
   this.refreshTokens = this.refreshTokens.filter(
-    session => session.expiresAt.getTime() > now.getTime()
+    (session) => session.expiresAt.getTime() > now.getTime()
   );
-  
+
   // returns true if any expired tokens were removed
-  return this.refreshTokens.length !== originalLength; 
+  return this.refreshTokens.length !== originalLength;
 };
 
+// remove current device session : after user logout or password change
+userSchema.methods.removeRefreshToken = async function (refreshToken) {
+  const remainingSessions = [];
+
+  // Loop through all refresh tokens of the user:
+  for (const session of this.refreshTokens) {
+    // Compare the refresh token from cookie with the hashed token in database:
+    const isMatch = await bcrypt.compare(refreshToken, session.token);
+
+    // keep in session-DB only those that do not match the refresh token from cookie:
+    if (!isMatch) {
+      remainingSessions.push(session);
+    }
+  }
+
+  // replace old session from DB which is logout:
+  this.refreshTokens = remainingSessions;
+
+};
+*/
+// Alternative way, to remove expired session first : in case user has multiple sessions 
+// and some of them are expired, then remove those expired sessions
+//  before adding new session to DB and to remove current device session : after user logout or password change:  
+attachSessionMethods(userSchema);
+
+userSchema.index({ email: 1 });
+userSchema.index({ mobileNumber: 1 });
 
 export const User = mongoose.model("User", userSchema);

@@ -1,16 +1,15 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/user.model.js";
+import { Admin } from "../models/admin.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
 import { setCookie, clearCookie } from "../utils/setCookie.js";
 import { generateTokens } from "../utils/generateTokens.js";
 import { getProfile, updateProfile, deleteProfile } from "../profile/profileHandlers.js";
-import { updateAvatar } from "./avatar.controller.js";
 
 // to register a new user:
-export const registerUser = asyncHandler(async (req, res) => {
-  // 1. Extract user details from request body:
+export const registerAdmin = asyncHandler(async (req, res) => {
+  // 1. Extract admin details from request body:
   const { username, email, password, fullName, mobileNumber } = req.body;
 
   // 2. Validate required fields:
@@ -23,14 +22,14 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   // 3. Check if user with same email, username or mobile number already exists:
-  const existedUser = await User.findOne({
+  const existedAdmin = await Admin.findOne({
     $or: [{ email }, { username }, { mobileNumber }],
   });
 
-  if (existedUser) {
+  if (existedAdmin) {
     throw new ApiError(
       409,
-      " User with same email, username or mobile number are already existed "
+      "  An admin with same email, username or mobile number are already existed "
     );
   }
 
@@ -72,7 +71,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   const coverImageUrl = coverImage ? coverImage.secure_url : "";
 
   // 5. Create new user in database:
-  const user = await User.create({
+  const admin = await Admin.create({
     username: username.toLowerCase(),
     email,
     password,
@@ -82,16 +81,16 @@ export const registerUser = asyncHandler(async (req, res) => {
     coverImage: coverImageUrl,
   });
 
-  // 6. remove password and refresh token from user object before sending response:
-  // const createdUser = await User.findById(user._id).select("-password -refreshToken");
-  // or to remove unnecessary DB query after user creation and saves one DB hit:
-  const createdUser = user.toObject();
-  delete createdUser.password;
-  delete createdUser.refreshTokens;
+  // 6. remove password and refresh token from admin object before sending response:
+  // const createdAdmin = await Admin.findById(admin._id).select("-password -refreshToken");
+  // or to remove unnecessary DB query after admin creation and saves one DB hit:
+  const createdAdmin = admin.toObject();
+  delete createdAdmin.password;
+  delete createdAdmin.refreshTokens;
 
-  // 7. check User creation success:
-  if (!createdUser) {
-    throw new ApiError(500, "Failed to create user");
+  // 7. check admin creation success:
+  if (!createdAdmin) {
+    throw new ApiError(500, "Failed to create admin");
   }
 
   // 8. Delete local files after upload to Cloudinary:
@@ -109,14 +108,14 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
   */
 
-  // 9. Generate JWT token for the user:
-  // userSchema.methods.generateAccessToken = function () { ... };
-  // in user.model.js we pass function () with no parameters. therefore do not write like this:
-  // const accessToken = user.generateAccessToken( { userId: user._id, role: user.role } );
-  // const refreshToken = user.generateRefreshToken( { userId: user._id, role: user.role } );
-  
+  // 9. Generate JWT token for the admin:
+  // adminSchema.methods.generateAccessToken = function () { ... };
+  // in admin.model.js we pass function () with no parameters. therefore do not write like this:
+  // const accessToken = admin.generateAccessToken( { adminId: admin._id, role: admin.role } );
+  // const refreshToken = admin.generateRefreshToken( { adminId: admin._id, role: admin.role } );
+
   // function generateTokens() definds in generateTokens.js file :
-  const { accessToken, refreshToken } = await generateTokens(user, req);
+  const { accessToken, refreshToken } = await generateTokens(admin, req);
 
   // 10. Save refreshToken in database for the user:
   // Note: we cannot save accessToken in database
@@ -147,118 +146,120 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
   */
   // instead of writing cookie setting logic here, we will write it in a separate utility function for better code organization and reusability:
-  
+
   // function setCookie() definds in setCookie.js file :
   setCookie(res, accessToken, refreshToken);
 
   // 14. Send success response with user data (excluding sensitive info):
   res
     .status(201)
-    .json(new ApiResponse(201, createdUser, "User registered successfully"));
+    .json(new ApiResponse(201, createdAdmin, "Admin registered successfully"));
 });
 
-export const loginUser = asyncHandler(async (req, res) => {
-    // 1. Extract email and password from request body:
-    const { email, mobileNumber, password } = req.body;
+export const loginAdmin = asyncHandler(async (req, res) => {
+  // 1. Extract email and password from request body:
+  const { email, mobileNumber, password } = req.body;
 
-    // 2. Validate required fields:
-    if (!password || (!email && !mobileNumber)) {
-      throw new ApiError(
-        400,
-        "Email or mobile number and password are required"
-      );
-    }
+  // 2. Validate required fields:
+  if (!password || (!email && !mobileNumber)) {
+    throw new ApiError(400, "Email or mobile number and password are required");
+  }
 
-    // 3. Find user by email or mobile number:
-    const user = await User.findOne({
-      $or: [{ email }, { mobileNumber: mobileNumber }],
-    }).select("+password +refreshTokens.token");
+  // 3. Find admin by email or mobile number:
+  const admin = await Admin.findOne({
+    $or: [{ email }, { mobileNumber: mobileNumber }],
+  }).select("+password +refreshTokens.token");
 
-    if (!user) {
-      throw new ApiError(401, "Invalid email/mobile number or password");
-    }
+  if (!admin) {
+    throw new ApiError(401, "Invalid email/mobile number or password");
+  }
 
-    // 4. Compare provided password with stored hashed password:
-    const isPasswordMatch = await user.isPasswordCorrect(password);
-    if (!isPasswordMatch) {
-      throw new ApiError(401, "Invalid email/mobile number or password");
-    }
+  // 4. Compare provided password with stored hashed password:
+  const isPasswordMatch = await admin.isPasswordCorrect(password);
+  if (!isPasswordMatch) {
+    throw new ApiError(401, "Invalid email/mobile number or password");
+  }
 
-    // 5. Generate new access token and refresh token:
-    /*const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
+  // 5. Generate new access token and refresh token:
+  /*const accessToken = admin.generateAccessToken();
+    const refreshToken = admin.generateRefreshToken();
     
     // 6. Hash the new refresh token and save it in database:
-    user.refreshToken = await bcrypt.hash( refreshToken, 10 );
-    await user.save({ validateBeforeSave: false });
+    admin.refreshToken = await bcrypt.hash( refreshToken, 10 );
+    await admin.save({ validateBeforeSave: false });
     */
 
-    // run cleanupRefreshTokens() function -- expired sessions removed :
-    if (user.cleanupRefreshTokens()) {
-      await user.save({ validateBeforeSave: false });
-    }
+  // run cleanupRefreshTokens() function -- expired sessions removed :
+  if (admin.cleanupRefreshTokens()) {
+    await admin.save({ validateBeforeSave: false });
+  }
 
-    // instead of writing step 5 - token generation and step 6 - saving logic here,
-    // we will write it in a separate utility function for better code organization and reusability:
-    const { accessToken, refreshToken } = await generateTokens(user, req);
+  // instead of writing step 5 - token generation and step 6 - saving logic here,
+  // we will write it in a separate utility function for better code organization and reusability:
+  const { accessToken, refreshToken } = await generateTokens(admin, req);
 
-    // 7. Set access token and refresh token in HTTP-only cookies:
-    setCookie(res, accessToken, refreshToken);
+  // 7. Set access token and refresh token in HTTP-only cookies:
+  setCookie(res, accessToken, refreshToken);
 
-    // 8. Send success response with user data (excluding sensitive info):
-    const userData = user.toObject();
-    delete userData.password;
-    delete userData.refreshTokens;
+  // 8. Send success response with admin data (excluding sensitive info):
+  const adminData = admin.toObject();
+  delete adminData.password;
+  delete adminData.refreshTokens;
 
-    res
-      .status(200)
-      .json(new ApiResponse(200, userData, "User logged in successfully"));
+  res
+    .status(200)
+    .json(new ApiResponse(200, adminData, "Admin logged in successfully"));
 });
 
-export const logoutUser = asyncHandler(async (req, res) => {
-  if (!req.user || !req.cookies?.refreshToken) {
+export const logoutAdmin = asyncHandler(async (req, res) => {
+  if (!req.admin || !req.cookies?.refreshToken) {
     throw new ApiError(400, "Invalid logout request");
   }
 
-  // 1. Get user from request (set by auth middleware):
-  const user = req.user;
+  // 1. Get admin from request (set by auth middleware):
+  const admin = req.admin;
 
   // 2. Get refresh token from cookies:
-  const refreshTokenFromCookie = req.cookies.refreshToken;
+  const refreshTokenFromCookie = req.cookies?.refreshToken;
   if (!refreshTokenFromCookie) {
     throw new ApiError(401, "Refresh token missing");
   }
 
   // remove expired session first :
   // function cleanupRefreshTokens() definds in in commonAuth.model.js as attachSessionMethods().
-  await user.cleanupRefreshTokens();  
+  await admin.cleanupRefreshTokens();
+  await admin.save({ validateBeforeSave: false });
 
   // remove current device session :
   // function removeRefreshToken() definds in commonAuth.model.js as attachSessionMethods().
 
-  await user.removeRefreshToken(refreshTokenFromCookie);  
-  
-  // 3. Clear access token and refresh token cookies: 
+  await admin.removeRefreshToken(refreshTokenFromCookie);
+
+  // 3. Clear access token and refresh token cookies:
   // function clearCookie() definds in setCookie.js file :
   clearCookie(res);
 
   // 4. Send success response:
   return res
     .status(200)
-    .json(new ApiResponse(200, null, "User logged out successfully"));
+    .json(new ApiResponse(200, null, "Admin logged out successfully"));
 });
 
-export const getUserProfile = getProfile("user", "User");
+export const getAdminProfile = getProfile("admin", "Admin");
 
-export const updateUserProfile = updateProfile(User, "user", [
+
+export const updateAdminProfile = updateProfile(Admin, "admin", [
   "username",
   "email",  
   "mobileNumber",
   "fullName",
 ]);
 
-export const deleteUserProfile = deleteProfile(User, "user");
-
-export const updateUserAvatar = updateAvatar(User, "user");
+export const deleteAdminProfile = deleteProfile(Admin, "admin");
 
 
+export const uploadAdminAvatar = updateAvatar(Admin, "admin");
+
+
+
+//export const changeAdminPassword 

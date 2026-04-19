@@ -1,8 +1,11 @@
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import asyncHandler from "express-async-handler";
+import ms from "ms";
+
 
 export const generateTokens = asyncHandler(async (user, req) => {
+  
   // Generate access token and refresh token using user instance methods:
   const accessToken = user.generateAccessToken();
   const refreshToken = user.generateRefreshToken();
