@@ -1,41 +1,23 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
-import { commonAuthFields, attachHashCompare, attachTokenMethods, attachSessionMethods } from "./commonAuth.model.js";
+import { attachHashCompare, attachTokenMethods, attachSessionMethods } from "./commonAuth.model.js";
+import { baseSchema } from "./baseSchema.model.js";
+
+baseSchema.plugin(mongooseAggregatePaginate);
+
+attachHashCompare(baseSchema);
+attachTokenMethods(baseSchema);
+attachSessionMethods(baseSchema);
+
+baseSchema.index({ email: 1 });
+baseSchema.index({ mobileNumber: 1 });
+
+export const User = mongoose.model("User", baseSchema);
 
 
-const userSchema = new Schema(
-  {
-    ...commonAuthFields,
-
-    role: {
-      type: String,
-      enum: ["user", "vendor"],
-      default: "user",
-    },
-    orderHistory: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Order",
-      },
-    ],
-    feedbackHistory: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Feedback",
-      },
-    ],
-    likesHistory: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Product",
-      },
-    ],
-  },
-  { timestamps: true }
-);
 
 // Add pagination plugin:
-userSchema.plugin(mongooseAggregatePaginate);
+
 
 // to hash password before saving user document:
 /*userSchema.pre("save", async function (next) {
@@ -52,7 +34,6 @@ userSchema.methods.isPasswordCorrect = async function (password) {
 };
 */
 // Alternative way, to hash password before saving user document:
-attachHashCompare(userSchema);
 
 // to generate JWT access token: Short-lived access token
 /*userSchema.methods.generateAccessToken = function () {
@@ -80,7 +61,6 @@ userSchema.methods.generateRefreshToken = function () {
 
 // Alternative way,to generate JWT access token: Short-lived access token
 // and to generate JWT refresh token: Long-lived refresh token:
-attachTokenMethods(userSchema);
 
 // remove expired session first : in case user has multiple sessions 
 // and some of them are expired, then remove those expired sessions
@@ -122,9 +102,3 @@ userSchema.methods.removeRefreshToken = async function (refreshToken) {
 // Alternative way, to remove expired session first : in case user has multiple sessions 
 // and some of them are expired, then remove those expired sessions
 //  before adding new session to DB and to remove current device session : after user logout or password change:  
-attachSessionMethods(userSchema);
-
-userSchema.index({ email: 1 });
-userSchema.index({ mobileNumber: 1 });
-
-export const User = mongoose.model("User", userSchema);

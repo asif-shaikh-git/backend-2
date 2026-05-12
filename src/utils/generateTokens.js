@@ -1,10 +1,8 @@
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
-import asyncHandler from "express-async-handler";
 import ms from "ms";
 
-
-export const generateTokens = asyncHandler(async (user, req) => {
+export const generateTokens = async (user, req) => {
   
   // Generate access token and refresh token using user instance methods:
   const accessToken = user.generateAccessToken();
@@ -13,20 +11,24 @@ export const generateTokens = asyncHandler(async (user, req) => {
   const sessionId = nanoid();
 
   const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
+  if (!user.refreshTokens.length >= 5) {
+    user.refreshTokens.shift(); // Remove the oldest refresh token if there are already 5 tokens
+  }
+
   // Hash the refresh token and save it in the database:
   user.refreshTokens.push({
     token: hashedRefreshToken,
     sessionId,
-    device: req.headers["user-agent"] || "Unknown",
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"],
-    expiresAt: new Date(Date.now() + ms(process.env.REFRESH_TOKEN_EXPIRES_IN)), // Set expiration for refresh token (7 days)
+    expiresAt: new Date(Date.now() + ms(process.env.REFRESH_TOKEN_EXPIRES_IN || "7d")), // Set expiration for refresh token (7 days)
   });
 
   await user.save({ validateBeforeSave: false });
 
   return { accessToken, refreshToken, sessionId };
-});
+};
 
 // 10. Save refreshToken in database for the user:
 // Note: we cannot save accessToken in database

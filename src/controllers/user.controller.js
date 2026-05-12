@@ -2,11 +2,12 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
-import uploadOnCloudinary from "../utils/cloudinary.js";
+import { uploadOnCloudinary, deleteFromCloudinary, deleteMultipleFromCloudinary } from "../utils/cloudinary.js";
 import { setCookie, clearCookie } from "../utils/setCookie.js";
 import { generateTokens } from "../utils/generateTokens.js";
-import { getProfile, updateProfile, deleteProfile } from "../profile/profileHandlers.js";
+import { getProfile, updateProfile, deleteProfile } from "./profile/profileHandlers.js";
 import { updateAvatar } from "./avatar.controller.js";
+import { changePassword, forgotPassword, resetPassword } from "./password/passwordHandlers.js";
 
 // to register a new user:
 export const registerUser = asyncHandler(async (req, res) => {
@@ -69,17 +70,21 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   // extracting the HTTPS image URL:
   const avatarUrl = avatar.secure_url;
+  const avatarPublicId = avatar.public_id;
   const coverImageUrl = coverImage ? coverImage.secure_url : "";
+  const coverImagePublicId = coverImage ? coverImage.public_id : "";
 
   // 5. Create new user in database:
   const user = await User.create({
     username: username.toLowerCase(),
     email,
+    mobileNumber,
     password,
     fullName,
-    mobileNumber,
     avatar: avatarUrl,
+    avatarPublicId,
     coverImage: coverImageUrl,
+    coverImagePublicId,
   });
 
   // 6. remove password and refresh token from user object before sending response:
@@ -181,7 +186,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     // 4. Compare provided password with stored hashed password:
     const isPasswordMatch = await user.isPasswordCorrect(password);
     if (!isPasswordMatch) {
-      throw new ApiError(401, "Invalid email/mobile number or password");
+      throw new ApiError(401, "Invalid password");
     }
 
     // 5. Generate new access token and refresh token:
@@ -248,7 +253,7 @@ export const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, null, "User logged out successfully"));
 });
 
-export const getUserProfile = getProfile("user", "User");
+export const getUserProfile = getProfile(User, "user");
 
 export const updateUserProfile = updateProfile(User, "user", [
   "username",
@@ -260,5 +265,11 @@ export const updateUserProfile = updateProfile(User, "user", [
 export const deleteUserProfile = deleteProfile(User, "user");
 
 export const updateUserAvatar = updateAvatar(User, "user");
+
+export const changeUserPassword = changePassword(User, "user");
+
+export const forgotUserPassword = forgotPassword(User, "user");
+
+export const resetUserPassword = resetPassword(User, "user");
 
 

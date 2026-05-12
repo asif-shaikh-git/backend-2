@@ -43,21 +43,15 @@ dotenv.config({
 const app = express();
 connectDB()
 .then(() => {
-    app.on("error", (err) => {
+    const server = app.listen(process.env.PORT || 8000, () => {
+        console.log(`App is listening on port: ${process.env.PORT || 8000}`);
+    });
+    server.on("error", (err) => {
         console.log("Failed to start server", err);
         process.exit(1);
-    });
-    app.listen(process.env.PORT || 8000, () => {
-        console.log(`App is listening on port: ${process.env.PORT || 8000}`);
     });
 })
 .catch((error) => {
     console.log("Failed to connect to MongoDB", error);
     process.exit(1);
 });
-
-export default connectDB;
-
-
-
-

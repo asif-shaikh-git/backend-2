@@ -1,19 +1,37 @@
+import asyncHandler from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
+import { deleteFromCloudinary } from "../../utils/cloudinary.js";
 
 // 1. Get profile handler:
-export const getProfile = (reqKey, role) => {
+export const getProfile = (Model, reqKey, allowParamsAccess = false ) => {
   return asyncHandler(async (req, res) => {
 
-   // 1. Get login user/admin/vendor from request (set by auth middleware):
-    const user = req[reqKey]; // req.user = user;
+    let userId;
+
+    // Admin can fetch by params
+    if (allowParamsAccess) {
+      userId = req.params.userId;
+    } else {
+       // Logged-in user/vendor/admin fetch own profile
+      userId = req[reqKey]?._id;
+
+    if (!userId) {
+      throw new ApiError(400, `${Model.modelName} ID is required`);
+    } 
+    
+    const user = await Model.findById(userId).select("-password -refreshTokens");
+
 
     if (!user) {
-        throw new ApiError(404, `${role} not found`);
+        throw new ApiError(404, `${Model.modelName} not found`);
     }
+  }
 
     // 2. Send success response with user profile data:
-    res
+   return res
       .status(200)
-      .json(new ApiResponse(200, user, `${role} profile retrieved successfully`));
+      .json(new ApiResponse(200, user, `${Model.modelName} profile retrieved successfully`));
   }
     );
 };
@@ -23,10 +41,11 @@ export const updateProfile = (Model, reqKey, allowedFields) => {
   return asyncHandler(async (req, res) => {
 
     // 1. Get login user/admin/vendor from request (set by auth middleware):
-    const user = req[reqKey]; // req.user = user;
+     // req[reqKey] = req.user/req.admin/req.vendor
+    const user = req[reqKey];
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, `${Model.modelName} not found`);
     }
 
     // Get the ID of the entity being updated (user or admin or vendor):
@@ -84,26 +103,30 @@ export const updateProfile = (Model, reqKey, allowedFields) => {
 };
 
 // 3. Delete profile handler:
-export const deleteProfile = (Model, reqKey, role) => {
+export const deleteProfile = (Model, reqKey) => {
   return asyncHandler(async (req, res) => {
     // Implementation for deleting profile
     
     // 1. Get login user/admin/vendor from request (set by auth middleware):
     const user = req[reqKey]; // req.user = user;
     if (!user) {
-        throw new ApiError(404, `${role} not found`);
+        throw new ApiError(404, `${Model.modelName} not found`);
+    }
+
+    if (user.avatarPublicId) {
+      await deleteFromCloudinary(user.avatarPublicId);
+    }
+
+    if (user.coverImagePublicId) {
+      await deleteFromCloudinary(user.coverImagePublicId);
     }
     
     // 2. Delete the user profile from the database:
-    const deletedUser = await Model.findByIdAndDelete(user._id);
-
-    if (!deletedUser) {
-        throw new ApiError(500, `Failed to delete ${role} profile`);
-    }
+    await user.deleteOne();
 
     // 3. Send success response:
-    res
+    return res
         .status(200)
-        .json(new ApiResponse(200, null, `${role} profile deleted successfully`));
+        .json(new ApiResponse(200, null, `${Model.modelName} profile deleted successfully`));
     });
 };

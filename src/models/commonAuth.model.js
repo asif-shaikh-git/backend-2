@@ -3,6 +3,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 export const commonAuthFields = {
+  userId: {
+    type: Number,
+    required: true,
+    index: true,
+  },
   username: {
     type: String,
     required: [true, "Username is required"],
@@ -13,6 +18,7 @@ export const commonAuthFields = {
   },
   email: {
     type: String,
+    required: [true, "Email is required"],
     unique: true,
     lowercase: true,
     trim: true,
@@ -49,7 +55,6 @@ export const commonAuthFields = {
     {
       type: Schema.Types.ObjectId,
       ref: "Address",
-      trim: true,
       index: true,
     },
   ],
@@ -58,9 +63,23 @@ export const commonAuthFields = {
     required: [true, "User avatar is required"],
     default: "",
   },
+  avatarPublicId: {
+    type: String, //cloudinary url
+    required: [true, "User avatarPublicId is required"],
+    default: "",
+  },
   coverImage: {
     type: String, //cloudinary url
     default: "",
+  },
+  coverImagePublicId: {
+    type: String, //cloudinary url
+    default: "",
+  },
+  media: {
+    url: String,
+    publicId: String,
+    resourceType: String,
   },
   socketIds: [
     {
@@ -75,10 +94,6 @@ export const commonAuthFields = {
         select: false,
       },
       sessionId: {
-        type: String,
-        required: true,
-      },
-      device: {
         type: String,
         required: true,
       },
@@ -107,8 +122,11 @@ export const attachHashCompare = (schema) => {
   schema.pre("save", async function (next) {
     if (!this.isModified("password")) return next();
 
-    this.password = await bcrypt.hash(this.password, Number(process.env.BCRYPT_ROUNDS) || 10 );
-    
+    this.password = await bcrypt.hash(
+      this.password,
+      Number(process.env.BCRYPT_ROUNDS) || 10
+    );
+
     next();
   });
 
@@ -119,37 +137,33 @@ export const attachHashCompare = (schema) => {
 };
 
 export const attachTokenMethods = (schema) => {
-
   // 1.access token:
   schema.methods.generateAccessToken = function () {
-    return jwt.sign(
-      {
-        _id: this._id,
-        email: this.email,
-        role: this.role,
-        username: this.username,
-        tokenVersion: {
-          type: Number,
-          default: 0,
-        }
-      },
-      process.env.ACCESS_TOKEN_SECRET,
-      {
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
-      }
-    );
+    const payload = {
+      _id: this._id,
+      role: this.role,
+      tokenVersion: this.tokenVersion,
+    };
+
+    return jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+    });
   };
 
   // 2. refresh token:
   schema.methods.generateRefreshToken = function () {
-    return jwt.sign({ _id: this._id, tokenVersion: this.tokenVersion }, process.env.REFRESH_TOKEN_SECRET, {
+    const payload = {
+      _id: this._id,
+      role: this.role,
+      tokenVersion: this.tokenVersion,
+    };
+    return jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {
       expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN,
     });
   };
 };
 
 export const attachSessionMethods = (schema) => {
-
   // to remove expired refresh tokens:
   schema.methods.cleanupRefreshTokens = async function () {
     const now = new Date();
@@ -188,7 +202,5 @@ export const attachSessionMethods = (schema) => {
 
     // only active refreshTokens are save in session (DB):
     await this.save({ validateBeforeSave: false });
-
   };
 };
-

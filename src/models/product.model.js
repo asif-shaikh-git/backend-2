@@ -1,10 +1,14 @@
 import mongoose, { Schema } from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
-
-
 const productSchema = new Schema(
   {
+    productId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
     productname: {
       type: String,
       required: [true, "Product name is required"],
@@ -20,35 +24,40 @@ const productSchema = new Schema(
     price: {
       type: Number,
       required: [true, "Provide Price of Product"],
-      min: [0, "Price of a Product can't be ZERO or NEGATIVE"],
+      min: [10, "Price of a Product can't be ZERO or NEGATIVE"],
     },
     category: {
       type: String,
       required: [true, "The Product must be put in desired Category"],
-      unique: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
     brandname: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
     stock: {
       type: Number,
       required: true,
       default: 0,
     },
-    productImages: [
-      {
-        type: String, // cloudinary url
+    productImages: {
+        type: [ String ], // cloudinary url
+        validate: {
+          validator: arr => arr.length >0,
+          message: "At least one product image is required"
+        }
       },
-    ],
+  
     ratings: {
       type: Number,
       default: 0,
+      min: 0,
+      max: 5,
     },
     numOfReviews: {
       type: Number,
@@ -60,12 +69,20 @@ const productSchema = new Schema(
     },
     createdBy: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      required: true,
+      refPath: "creatorModel",
+    },
+    creatorModel: {
+      type: String,
+      required: true,
+      enum: ["Vendor", "Admin"],
     },
   },
   { timestamps: true }
 );
 
 productSchema.plugin(mongooseAggregatePaginate);
+
+productSchema.index({ productname: "text", description: "text" });
 
 export const Product = mongoose.model("Product", productSchema);

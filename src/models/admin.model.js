@@ -1,5 +1,10 @@
 import mongoose, { Schema } from "mongoose";
-import { commonAuthFields, attachHashCompare, attachTokenMethods, attachSessionMethods } from "./commonAuth.model.js";
+import {
+  commonAuthFields,
+  attachHashCompare,
+  attachTokenMethods,
+  attachSessionMethods,
+} from "./commonAuth.model.js";
 
 const adminSchema = new Schema(
   {
@@ -8,41 +13,13 @@ const adminSchema = new Schema(
       type: String,
       enum: ["SUPER_ADMIN", "ADMIN", "MODERATOR"],
       default: "ADMIN",
-    },  
+    },
     suggestions: {
-      type: [
-        {
-          option: {
-            type: String,
-            enum: ["ENQUIRY", "SUGGESTION", "CHAT", "COMPLAINT"],
-            required: true,
-          },
-          comment: {
-            type: String,
-            trim: true,
-          },
-          media: [
-            {
-              url: {
-                type: String,
-                required: true,
-              },
-              type: {
-                type: String,
-                enum: ["IMAGE", "VIDEO"],
-              },
-            },
-          ],
-          createdAt: {
-            type: Date,
-            default: Date.now,
-          },
-        },
-      ],
+      type: [ suggestionSchema ],
       default: [],
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 // to hash password before saving admin document:
@@ -53,7 +30,23 @@ attachTokenMethods(adminSchema);
 
 attachSessionMethods(adminSchema);
 
-adminSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email: { $exists: true } } } );
-adminSchema.index({ mobileNumber: 1 }, { unique: true, partialFilterExpression: { mobileNumber: { $exists: true } } } );
+adminSchema.virtual("isVerified").get(function () {
+  return this.isEmailVerified && this.isMobileVerified;
+});
+
+adminSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $exists: true, $ne: null } },
+  }
+);
+adminSchema.index(
+  { mobileNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { mobileNumber: { $exists: true, $ne: null } },
+  }
+);
 
 export const Admin = mongoose.model("Admin", adminSchema);

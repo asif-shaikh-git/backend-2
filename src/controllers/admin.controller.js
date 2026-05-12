@@ -5,7 +5,9 @@ import { Admin } from "../models/admin.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
 import { setCookie, clearCookie } from "../utils/setCookie.js";
 import { generateTokens } from "../utils/generateTokens.js";
-import { getProfile, updateProfile, deleteProfile } from "../profile/profileHandlers.js";
+import { getProfile, updateProfile, deleteProfile } from "./profile/profileHandlers.js";
+import { updateAvatar } from "./avatar.controller.js";
+import { changePassword, forgotPassword, resetPassword } from "./password/passwordHandlers.js";
 
 // to register a new user:
 export const registerAdmin = asyncHandler(async (req, res) => {
@@ -68,7 +70,9 @@ export const registerAdmin = asyncHandler(async (req, res) => {
 
   // extracting the HTTPS image URL:
   const avatarUrl = avatar.secure_url;
+  const avatarPublicId = avatar.public_id;
   const coverImageUrl = coverImage ? coverImage.secure_url : "";
+  const coverImagePublicId = coverImage ? coverImage.public_id : "";
 
   // 5. Create new user in database:
   const admin = await Admin.create({
@@ -78,7 +82,10 @@ export const registerAdmin = asyncHandler(async (req, res) => {
     fullName,
     mobileNumber,
     avatar: avatarUrl,
+    avatarPublicId,
     coverImage: coverImageUrl,
+    coverImagePublicId,
+
   });
 
   // 6. remove password and refresh token from admin object before sending response:
@@ -245,8 +252,9 @@ export const logoutAdmin = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, null, "Admin logged out successfully"));
 });
 
-export const getAdminProfile = getProfile("admin", "Admin");
+export const getAdminProfile = getProfile(Admin, "admin");
 
+export const getAnyUserProfile = getProfile(User, "admin", true);
 
 export const updateAdminProfile = updateProfile(Admin, "admin", [
   "username",
@@ -257,9 +265,10 @@ export const updateAdminProfile = updateProfile(Admin, "admin", [
 
 export const deleteAdminProfile = deleteProfile(Admin, "admin");
 
-
 export const uploadAdminAvatar = updateAvatar(Admin, "admin");
 
+export const changeAdminPassword = changePassword(Admin, "admin");
 
+export const forgotAdminPassword = forgotPassword(Admin, "admin");
 
-//export const changeAdminPassword 
+export const resetAdminPassword = resetPassword(Admin, "admin");
