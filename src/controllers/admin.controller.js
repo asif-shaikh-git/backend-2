@@ -2,6 +2,8 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Admin } from "../models/admin.model.js";
+import { Customer } from "../models/customer.model.js";
+import { Vendor } from "../models/vendor.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
 import { setCookie, clearCookie } from "../utils/setCookie.js";
 import { generateTokens } from "../utils/generateTokens.js";
@@ -17,7 +19,7 @@ export const registerAdmin = asyncHandler(async (req, res) => {
   // 2. Validate required fields:
   if (
     [username, email, password, fullName, mobileNumber].some(
-      (field) => !field || field.trim() === ""
+      (field) => typeof field !== "string" || !field.trim()
     )
   ) {
     throw new ApiError(400, "All fields are required");
@@ -31,7 +33,7 @@ export const registerAdmin = asyncHandler(async (req, res) => {
   if (existedAdmin) {
     throw new ApiError(
       409,
-      "  An admin with same email, username or mobile number are already existed "
+      " Admin with this email, username or mobile number are already exists "
     );
   }
 
@@ -71,29 +73,26 @@ export const registerAdmin = asyncHandler(async (req, res) => {
   // extracting the HTTPS image URL:
   const avatarUrl = avatar.secure_url;
   const avatarPublicId = avatar.public_id;
-  const coverImageUrl = coverImage ? coverImage.secure_url : "";
-  const coverImagePublicId = coverImage ? coverImage.public_id : "";
+  const coverImageUrl = coverImage ? coverImage.secure_url : null;
+  const coverImagePublicId = coverImage ? coverImage.public_id : null;
 
   // 5. Create new user in database:
-  const admin = await Admin.create({
+  const newAdmin = await Admin.create({
     username: username.toLowerCase(),
     email,
     password,
     fullName,
     mobileNumber,
     avatar: avatarUrl,
-    avatarPublicId,
+    avatarPublicId: avatarPublicId,
     coverImage: coverImageUrl,
-    coverImagePublicId,
-
+    coverImagePublicId: coverImagePublicId,
   });
 
   // 6. remove password and refresh token from admin object before sending response:
   // const createdAdmin = await Admin.findById(admin._id).select("-password -refreshToken");
   // or to remove unnecessary DB query after admin creation and saves one DB hit:
-  const createdAdmin = admin.toObject();
-  delete createdAdmin.password;
-  delete createdAdmin.refreshTokens;
+  const createdAdmin = newAdmin.toSafeObject();
 
   // 7. check admin creation success:
   if (!createdAdmin) {
@@ -122,7 +121,7 @@ export const registerAdmin = asyncHandler(async (req, res) => {
   // const refreshToken = admin.generateRefreshToken( { adminId: admin._id, role: admin.role } );
 
   // function generateTokens() definds in generateTokens.js file :
-  const { accessToken, refreshToken } = await generateTokens(admin, req);
+  const { accessToken, refreshToken } = await generateTokens(newAdmin, req);
 
   // 10. Save refreshToken in database for the user:
   // Note: we cannot save accessToken in database
@@ -158,7 +157,7 @@ export const registerAdmin = asyncHandler(async (req, res) => {
   setCookie(res, accessToken, refreshToken);
 
   // 14. Send success response with user data (excluding sensitive info):
-  res
+  return res
     .status(201)
     .json(new ApiResponse(201, createdAdmin, "Admin registered successfully"));
 });
@@ -174,17 +173,12 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
   // 3. Find admin by email or mobile number:
   const admin = await Admin.findOne({
-    $or: [{ email }, { mobileNumber: mobileNumber }],
-  }).select("+password +refreshTokens.token");
-
-  if (!admin) {
-    throw new ApiError(401, "Invalid email/mobile number or password");
-  }
+    $or: [{ email }, { mobileNumber}],
+  }).select("+password +refreshTokens");
 
   // 4. Compare provided password with stored hashed password:
-  const isPasswordMatch = await admin.isPasswordCorrect(password);
-  if (!isPasswordMatch) {
-    throw new ApiError(401, "Invalid email/mobile number or password");
+  if (!admin || !(await admin.isPasswordCorrect(password))) {
+    throw new ApiError(401, "Invalid credentials");
   }
 
   // 5. Generate new access token and refresh token:
@@ -197,7 +191,8 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     */
 
   // run cleanupRefreshTokens() function -- expired sessions removed :
-  if (admin.cleanupRefreshTokens()) {
+  const cleanupResult = await admin.cleanupRefreshTokens();
+  if (cleanupResult.expiredSessionsRemoved) {
     await admin.save({ validateBeforeSave: false });
   }
 
@@ -209,11 +204,9 @@ export const loginAdmin = asyncHandler(async (req, res) => {
   setCookie(res, accessToken, refreshToken);
 
   // 8. Send success response with admin data (excluding sensitive info):
-  const adminData = admin.toObject();
-  delete adminData.password;
-  delete adminData.refreshTokens;
-
-  res
+  const adminData = admin.toSafeObject();
+  
+  return res
     .status(200)
     .json(new ApiResponse(200, adminData, "Admin logged in successfully"));
 });
@@ -234,13 +227,18 @@ export const logoutAdmin = asyncHandler(async (req, res) => {
 
   // remove expired session first :
   // function cleanupRefreshTokens() definds in in commonAuth.model.js as attachSessionMethods().
-  await admin.cleanupRefreshTokens();
-  await admin.save({ validateBeforeSave: false });
+  const cleanupResult = await admin.cleanupRefreshTokens();
+  if (cleanupResult.expiredSessionsRemoved) {
+    await admin.save({ validateBeforeSave: false });
+  }
 
   // remove current device session :
   // function removeRefreshToken() definds in commonAuth.model.js as attachSessionMethods().
 
-  await admin.removeRefreshToken(refreshTokenFromCookie);
+  const result = await admin.removeRefreshToken(refreshTokenFromCookie);
+  if (result.sessionRemoved) {
+    await admin.save({ validateBeforeSave: false });
+  }
 
   // 3. Clear access token and refresh token cookies:
   // function clearCookie() definds in setCookie.js file :
@@ -254,11 +252,14 @@ export const logoutAdmin = asyncHandler(async (req, res) => {
 
 export const getAdminProfile = getProfile(Admin, "admin");
 
-export const getAnyUserProfile = getProfile(User, "admin", true);
+export const getAnyUserProfile = getProfile(Customer, "admin", true);
+
+export const getAnyVendorProfile = getProfile(Vendor, "admin", true);
+
 
 export const updateAdminProfile = updateProfile(Admin, "admin", [
   "username",
-  "email",  
+  "email",
   "mobileNumber",
   "fullName",
 ]);

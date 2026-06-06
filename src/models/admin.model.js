@@ -9,10 +9,15 @@ import {
 const adminSchema = new Schema(
   {
     ...commonAuthFields,
+    accountType: {
+      type: String,
+      default: "Admin",
+      immutable: true,
+    },
     role: {
       type: String,
-      enum: ["SUPER_ADMIN", "ADMIN", "MODERATOR"],
-      default: "ADMIN",
+      enum: ["SuperAdmin", "Admin"],
+      default: "Admin",
     },
     suggestions: {
       type: [ suggestionSchema ],
@@ -48,5 +53,12 @@ adminSchema.index(
     partialFilterExpression: { mobileNumber: { $exists: true, $ne: null } },
   }
 );
+
+adminSchema.methods.toSafeObject = function () {
+  const adminObject = this.toObject();
+  delete adminObject.password;
+  delete adminObject.refreshTokens;
+  return adminObject;
+};
 
 export const Admin = mongoose.model("Admin", adminSchema);

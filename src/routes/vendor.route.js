@@ -6,7 +6,7 @@ import { verifyVendor } from "../middlewares/verifyAdminVendorCustomer.middlewar
 const vendorRouter = Router();
 
 // auth:
-vendorRouter.post("/register", registerVendor);
+vendorRouter.post("/register", upload.fields([{ name: "avatar", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]), registerVendor);
 vendorRouter.post("/login", loginVendor);
 vendorRouter.post("/logout", verifyJwt, logoutVendor);
 

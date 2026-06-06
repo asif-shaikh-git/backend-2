@@ -52,7 +52,27 @@ const productSchema = new Schema(
           message: "At least one product image is required"
         }
       },
-  
+    productVariants: [
+      {
+        variantName: {
+          type: String,
+          required: true,
+          lowercase: true,
+          trim: true,
+        },
+        additionalPrice: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+      },
+    ],
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     ratings: {
       type: Number,
       default: 0,

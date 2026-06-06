@@ -3,7 +3,6 @@ import { nanoid } from "nanoid";
 import ms from "ms";
 
 export const generateTokens = async (user, req) => {
-  
   // Generate access token and refresh token using user instance methods:
   const accessToken = user.generateAccessToken();
   const refreshToken = user.generateRefreshToken();
@@ -11,9 +10,15 @@ export const generateTokens = async (user, req) => {
   const sessionId = nanoid();
 
   const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+  
+  // Remove expired tokens first:
+  user.refreshTokens = user.refreshTokens.filter(
+    (tokenObj) => tokenObj.expiresAt > new Date()
+  );
 
-  if (!user.refreshTokens.length >= 5) {
-    user.refreshTokens.shift(); // Remove the oldest refresh token if there are already 5 tokens
+  // Remove the oldest refresh token if there are already 5 tokens in the database to prevent token overload:
+  if (user.refreshTokens.length >= 5) {
+    user.refreshTokens.shift(); 
   }
 
   // Hash the refresh token and save it in the database:
@@ -22,7 +27,9 @@ export const generateTokens = async (user, req) => {
     sessionId,
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"],
-    expiresAt: new Date(Date.now() + ms(process.env.REFRESH_TOKEN_EXPIRES_IN || "7d")), // Set expiration for refresh token (7 days)
+    expiresAt: new Date(
+      Date.now() + ms(process.env.REFRESH_TOKEN_EXPIRES_IN || "7d")
+    ), // Set expiration for refresh token (7 days)
   });
 
   await user.save({ validateBeforeSave: false });

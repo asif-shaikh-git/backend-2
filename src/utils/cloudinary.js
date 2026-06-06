@@ -21,13 +21,17 @@ export const uploadOnCloudinary = async (localFilePath) => {
 
     // Delete the local file after upload
     if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
+      await fs.promises.unlink(localFilePath);
     }
-    return uploadResult;
+    return {
+      url:uploadResult.secure_url,
+      public_id: uploadResult.public_id,
+    };
+    
   } catch (error) {
     // delete the local file if upload fails
     if (localFilePath && fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
+      await fs.promises.unlink(localFilePath);
     }
     return null;
   }
@@ -37,7 +41,7 @@ export const deleteFromCloudinary = async (publicId, resourceType = "image") => 
   try {
     if (!publicId) return null;
 
-    const deleteResult = await cloudinary.uploader.destroy(publicId);
+    const deleteResult = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
     return deleteResult;
   } catch (error) {
     console.error("Cloudinary delete error:", error);
@@ -51,9 +55,10 @@ export const deleteMultipleFromCloudinary = async (publicIds) => {
       return null;
     }
     const multipleDeleteResult =
-      await cloudinary.api.delete_resources(publicIds);
+      await cloudinary.api.delete_resources(publicIds, { resource_type: "image" });
     return multipleDeleteResult;
   } catch (error) {
+    console.error("Cloudinary multiple delete error:", error);
     return null;
   }
 };

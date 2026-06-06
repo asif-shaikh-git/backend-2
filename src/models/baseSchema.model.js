@@ -1,5 +1,9 @@
 import { Schema } from "mongoose";
-import { commonAuthFields } from "./commonAuth.model.js";
+import { 
+  commonAuthFields,
+  attachHashCompare,
+  attachTokenMethods,
+  attachSessionMethods, } from "./commonAuth.model.js";
 
 export const baseSchema = new Schema(
   {
@@ -12,3 +16,7 @@ export const baseSchema = new Schema(
     toObject: { virtuals: true },  // userSchema.set("toObject", { virtuals: true });
   }
 );
+
+attachHashCompare(baseSchema);
+attachTokenMethods(baseSchema);
+attachSessionMethods(baseSchema);

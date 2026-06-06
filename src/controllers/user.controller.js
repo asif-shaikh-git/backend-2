@@ -17,7 +17,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   // 2. Validate required fields:
   if (
     [username, email, password, fullName, mobileNumber].some(
-      (field) => !field || field.trim() === ""
+      (field) => typeof field !== "string" || !field.trim()
     )
   ) {
     throw new ApiError(400, "All fields are required");
@@ -71,31 +71,30 @@ export const registerUser = asyncHandler(async (req, res) => {
   // extracting the HTTPS image URL:
   const avatarUrl = avatar.secure_url;
   const avatarPublicId = avatar.public_id;
-  const coverImageUrl = coverImage ? coverImage.secure_url : "";
-  const coverImagePublicId = coverImage ? coverImage.public_id : "";
+
+  const coverImageUrl = coverImage ? coverImage.secure_url : null;
+  const coverImagePublicId = coverImage ? coverImage.public_id : null;
 
   // 5. Create new user in database:
-  const user = await User.create({
+  const newUser = await User.create({
     username: username.toLowerCase(),
     email,
     mobileNumber,
     password,
     fullName,
     avatar: avatarUrl,
-    avatarPublicId,
+    avatarPublicId: avatarPublicId,
     coverImage: coverImageUrl,
-    coverImagePublicId,
+    coverImagePublicId: coverImagePublicId,
   });
 
   // 6. remove password and refresh token from user object before sending response:
-  // const createdUser = await User.findById(user._id).select("-password -refreshToken");
+  // const createdUser = await User.findById(newUser._id).select("-password -refreshToken");
   // or to remove unnecessary DB query after user creation and saves one DB hit:
-  const createdUser = user.toObject();
-  delete createdUser.password;
-  delete createdUser.refreshTokens;
+  const createdUser = newUser.toSafeObject();
 
   // 7. check User creation success:
-  if (!createdUser) {
+  if (!newUser) {
     throw new ApiError(500, "Failed to create user");
   }
 
@@ -121,7 +120,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   // const refreshToken = user.generateRefreshToken( { userId: user._id, role: user.role } );
   
   // function generateTokens() definds in generateTokens.js file :
-  const { accessToken, refreshToken } = await generateTokens(user, req);
+  const { accessToken, refreshToken } = await generateTokens(newUser, req);
 
   // 10. Save refreshToken in database for the user:
   // Note: we cannot save accessToken in database
@@ -157,7 +156,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   setCookie(res, accessToken, refreshToken);
 
   // 14. Send success response with user data (excluding sensitive info):
-  res
+  return res
     .status(201)
     .json(new ApiResponse(201, createdUser, "User registered successfully"));
 });
@@ -176,17 +175,11 @@ export const loginUser = asyncHandler(async (req, res) => {
 
     // 3. Find user by email or mobile number:
     const user = await User.findOne({
-      $or: [{ email }, { mobileNumber: mobileNumber }],
-    }).select("+password +refreshTokens.token");
+      $or: [{ email }, { mobileNumber }],
+    }).select("+password +refreshTokens");
 
-    if (!user) {
-      throw new ApiError(401, "Invalid email/mobile number or password");
-    }
-
-    // 4. Compare provided password with stored hashed password:
-    const isPasswordMatch = await user.isPasswordCorrect(password);
-    if (!isPasswordMatch) {
-      throw new ApiError(401, "Invalid password");
+    if (!user || !(await user.isPasswordCorrect(password))) {
+      throw new ApiError(401, "Invalid credentials");
     }
 
     // 5. Generate new access token and refresh token:
@@ -199,7 +192,8 @@ export const loginUser = asyncHandler(async (req, res) => {
     */
 
     // run cleanupRefreshTokens() function -- expired sessions removed :
-    if (user.cleanupRefreshTokens()) {
+    const cleanupResult = await user.cleanupRefreshTokens();
+    if (cleanupResult.expiredSessionsRemoved) {
       await user.save({ validateBeforeSave: false });
     }
 
@@ -211,11 +205,9 @@ export const loginUser = asyncHandler(async (req, res) => {
     setCookie(res, accessToken, refreshToken);
 
     // 8. Send success response with user data (excluding sensitive info):
-    const userData = user.toObject();
-    delete userData.password;
-    delete userData.refreshTokens;
+    const userData = user.toSafeObject();
 
-    res
+    return res
       .status(200)
       .json(new ApiResponse(200, userData, "User logged in successfully"));
 });
@@ -236,13 +228,20 @@ export const logoutUser = asyncHandler(async (req, res) => {
 
   // remove expired session first :
   // function cleanupRefreshTokens() definds in in commonAuth.model.js as attachSessionMethods().
-  await user.cleanupRefreshTokens();  
+  const cleanupResult = await user.cleanupRefreshTokens(); 
+  if (cleanupResult.expiredSessionsRemoved) {
+    await user.save({ validateBeforeSave: false });
+  } 
 
   // remove current device session :
   // function removeRefreshToken() definds in commonAuth.model.js as attachSessionMethods().
 
-  await user.removeRefreshToken(refreshTokenFromCookie);  
+  const result = await user.removeRefreshToken(refreshTokenFromCookie);  
   
+  if (result.sessionRemoved) {
+    await user.save({ validateBeforeSave: false });
+  }
+
   // 3. Clear access token and refresh token cookies: 
   // function clearCookie() definds in setCookie.js file :
   clearCookie(res);
@@ -254,6 +253,8 @@ export const logoutUser = asyncHandler(async (req, res) => {
 });
 
 export const getUserProfile = getProfile(User, "user");
+
+export const getAnyUserProfile = getProfile(User, "admin", true);
 
 export const updateUserProfile = updateProfile(User, "user", [
   "username",

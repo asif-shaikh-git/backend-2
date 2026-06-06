@@ -2,6 +2,12 @@ import mongoose, { Schema } from "mongoose";
 
 const addressSchema = new Schema(
   {
+    addressId: {
+      type: String,
+      required: true,
+      unique: true,
+      default: () => new mongoose.Types.ObjectId().toString(),
+    },
     user: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -14,7 +20,7 @@ const addressSchema = new Schema(
       trim: true,
     },
     mobileNumber: {
-      type: Number,
+      type: String,
       required: [true, "Mobile number required"],
       trim: true,
       match: [

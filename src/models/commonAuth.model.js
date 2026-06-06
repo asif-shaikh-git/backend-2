@@ -1,12 +1,14 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { nanoid } from "nanoid";
 
 export const commonAuthFields = {
   userId: {
     type: Number,
     required: true,
     index: true,
+    unique: true,
   },
   username: {
     type: String,
@@ -39,10 +41,14 @@ export const commonAuthFields = {
     type: Boolean,
     default: false,
   },
+  tokenVersion: {
+    type: Number,
+    default: 0,
+  },
   password: {
     type: String,
     required: [true, "Password is required"],
-    minlength: [6, "Password must be at least 6 characters long"],
+    minlength: [8, "Password must be at least 8 characters long"],
     select: false,
   },
   fullName: {
@@ -58,14 +64,19 @@ export const commonAuthFields = {
       index: true,
     },
   ],
+  accountType: {
+    type: String,
+    enum: ["Admin", "Vendor", "Customer"],
+    required: true,
+  },
   avatar: {
     type: String, //cloudinary url
-    required: [true, "User avatar is required"],
+    required: true,
     default: "",
   },
   avatarPublicId: {
     type: String, //cloudinary url
-    required: [true, "User avatarPublicId is required"],
+    required: true,
     default: "",
   },
   coverImage: {
@@ -120,8 +131,10 @@ export const commonAuthSchema = new Schema(commonAuthFields);
 export const attachHashCompare = (schema) => {
   // to hash password before saving user document:
   schema.pre("save", async function (next) {
+    // if password field is not modified, skip hashing and move to next middleware:
     if (!this.isModified("password")) return next();
-
+    
+    // if password is modified, hash the new password before saving:
     this.password = await bcrypt.hash(
       this.password,
       Number(process.env.BCRYPT_ROUNDS) || 10
@@ -141,7 +154,7 @@ export const attachTokenMethods = (schema) => {
   schema.methods.generateAccessToken = function () {
     const payload = {
       _id: this._id,
-      role: this.role,
+      accountType: this.accountType,
       tokenVersion: this.tokenVersion,
     };
 
@@ -154,8 +167,9 @@ export const attachTokenMethods = (schema) => {
   schema.methods.generateRefreshToken = function () {
     const payload = {
       _id: this._id,
-      role: this.role,
+      accountType: this.accountType,
       tokenVersion: this.tokenVersion,
+      jti: nanoid(), // unique identifier for the token to prevent replay attacks
     };
     return jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {
       expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN,
@@ -166,24 +180,30 @@ export const attachTokenMethods = (schema) => {
 export const attachSessionMethods = (schema) => {
   // to remove expired refresh tokens:
   schema.methods.cleanupRefreshTokens = async function () {
-    const now = new Date();
-
+    // Get current time in milliseconds:
+    const now = Date.now();
+   
+    // Store original length of refreshTokens array to check if any expired tokens were removed:
     const originalLength = this.refreshTokens.length;
-
+   
+    // Filter out expired tokens by keeping only those whose expiresAt is in the future:
     this.refreshTokens = this.refreshTokens.filter(
-      (session) => session.expiresAt.getTime() > now.getTime()
+      (session) => session.expiresAt && session.expiresAt.getTime() > now
     );
 
-    // only active refreshTokens are save in session (DB):
-    await this.save({ validateBeforeSave: false });
-
     // returns true if any expired tokens were removed
-    return this.refreshTokens.length !== originalLength;
+    return {
+      expiredSessionsRemoved: this.refreshTokens.length !== originalLength,
+      removedCount: originalLength - this.refreshTokens.length,
+      activeSessions: this.refreshTokens.length,
+    };
   };
 
   // to remove current device session : after user logout or password change
 
   schema.methods.removeRefreshToken = async function (refreshToken) {
+    const originalLength = this.refreshTokens.length;
+
     const remainingSessions = [];
 
     // Loop through all refresh tokens of the user:
@@ -200,7 +220,10 @@ export const attachSessionMethods = (schema) => {
     // replace old session from DB which is logout:
     this.refreshTokens = remainingSessions;
 
-    // only active refreshTokens are save in session (DB):
-    await this.save({ validateBeforeSave: false });
+    return {
+      sessionRemoved: this.refreshTokens.length !== originalLength,
+      removedCount: originalLength - this.refreshTokens.length,
+      activeSessions: this.refreshTokens.length,
+    };
   };
 };
