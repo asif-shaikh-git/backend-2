@@ -44,13 +44,17 @@ const productSchema = new Schema(
       type: Number,
       required: true,
       default: 0,
+      min: [0, "Stock can't be negative"],
     },
     productImages: {
         type: [ String ], // cloudinary url
+        required: true,
         validate: {
-          validator: arr => arr.length >0,
+          validator: function(arr) {
+            return Array.isArray(arr) && arr.length >0;
+          },
           message: "At least one product image is required"
-        }
+        },
       },
     productVariants: [
       {
@@ -73,7 +77,7 @@ const productSchema = new Schema(
       min: 0,
       max: 100,
     },
-    ratings: {
+    rating: {
       type: Number,
       default: 0,
       min: 0,
